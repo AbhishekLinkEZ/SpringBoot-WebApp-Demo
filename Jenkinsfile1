@@ -1,0 +1,70 @@
+pipeline {
+    agent any
+    
+    tools {
+        maven 'maven3'
+    }
+    
+    environment {
+        SCANNER_HOME= tool 'sonar-scanner'
+    }
+
+    stages {
+        stage('Git Checkout') {
+            steps {
+             git branch: 'main', credentialsId: 'git-authentication', url: 'https://github.com/AbhishekLinkEZ/SpringBoot-WebApp-Demo.git'   
+            }
+        }
+        
+        stage('code compile') {
+            steps {
+             sh "mvn compile"   
+            }
+        }
+        
+        stage('code test') {
+            steps {
+             sh "mvn test"   
+            }
+        }
+        
+        stage('sonarqube scanner') {
+            steps {
+                withSonarQubeEnv('sonar-server') {
+                    sh """ 
+                        ${SCANNER_HOME}/bin/sonar-scanner \
+                        -Dsonar.projectName=Java-WebApp \
+                        -Dsonar.java.binaries=. \
+                        -Dsonar.projectKey=Java-WebApp
+                    """
+                }
+            }
+        }
+        
+        stage('OWASP Dependency Check') {
+            steps {
+                   dependencyCheck additionalArguments: '--scan ./   ', odcInstallation: 'DC'
+                   dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
+            }
+        }
+        
+        stage('Maven Build') {
+            steps {
+                    sh "mvn clean package"
+            }
+        }
+        
+        stage('Docker Build & Push') {
+            steps {
+                   script {
+                       withDockerRegistry(credentialsId: 'dockerhub') {
+                            sh "docker build -t webapp ."
+                            sh "docker tag webapp abhim0055/webapp:latest"
+                            sh "docker push abhim0055/webapp:latest "
+                        }
+                   } 
+            }
+        }
+
+    }
+}
